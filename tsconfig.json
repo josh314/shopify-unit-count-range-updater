@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+
+    "baseUrl": "./infra",
+    "paths": {
+      "@types": [ "../types/index" ],
+      "@schemas": [ "../schemas/index" ],
+    },
+    "lib": ["es2024", "ESNext.Array", "ESNext.Collection", "ESNext.Iterator"],
+    "module": "nodenext",
+    "target": "es2022",
+
+    "strict": true,
+
+    "skipLibCheck": true,
+    "moduleResolution": "node16",
+
+    // for esbuild compatibility
+    "isolatedModules": true, //  https://esbuild.github.io/content-types/#isolated-modules
+    "esModuleInterop": true, //  https://esbuild.github.io/content-types/#es-module-interop
+
+  },
+  "exclude": [
+    "node_modules",
+    "cdk.out"
+  ]
+}
