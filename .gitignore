@@ -1,0 +1,24 @@
+# secrets and envvars
+.env
+settings.ts
+
+# build artifacts
+*.zip
+
+# data directories
+logs/*
+mnt/*
+
+# typescript build artifacts
+*.js
+*.d.ts
+dist
+
+# CDK asset staging directory
+.cdk.staging
+cdk.out
+cdk.context.json
+
+# temp and working files
+todo.md
+*log
