@@ -21,3 +21,22 @@ export interface EnvSettings {
 export type Settings = {
   [K in Env]: EnvSettings;
 };
+
+/** Legal values for secret names */
+export type SecretId = 'shopify';
+
+export interface SecretConfiguration {
+  id: SecretId;
+  envvar: string;
+  name: string;
+};
+
+/** Legal names for the project's lambda functions */
+export type LambdaId = '';
+
+// Define the type for lambda configurations
+export interface LambdaConfiguration {
+  id: LambdaId;
+  dir: string;
+  secrets?: SecretId[];
+}
