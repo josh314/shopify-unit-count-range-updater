@@ -34,4 +34,10 @@ services:
     ports:
       - "8888:8080"
 
+  poll-shopify-bulk-query-status:
+    <<: *lambda-common
+    container_name: poll-shopify-bulk-query-status
+    command: [ "PollShopifyBulkQueryStatus/index.handler" ]
+    ports:
+      - "8889:8080"
 

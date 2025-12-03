@@ -7,6 +7,7 @@ import axios from 'axios';
 
 const lambdas = [
   'schedule-shopify-bulk-query',
+  'poll-shopify-bulk-query-status',
 ];
 
 async function prompt( question: string ): Promise<string> {

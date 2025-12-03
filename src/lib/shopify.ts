@@ -78,6 +78,26 @@ const BulkOperationRunQueryDataSchema = z.object( {
 
 type BulkOperationRunQueryData = z.infer<typeof BulkOperationRunQueryDataSchema>;
 
+// Note that some numerical fields like objectCount are strings in the Shopify API (see https://shopify.dev/docs/api/admin-graphql/latest/scalars/UnsignedInt64)
+const CurrentBulkOperationDataSchema = z.object( {
+  currentBulkOperation: z.object( {
+    id: z.string(),
+    status: BulkOperationStatusSchema,
+    type: z.string(),
+    query: z.string(),
+    errorCode: z.string().nullable(),
+    createdAt: z.string(),
+    completedAt: z.string().nullable(),
+    objectCount: z.string().nullable(),
+    rootObjectCount: z.string().nullable(),
+    fileSize: z.string().nullable(),
+    url: z.string().nullable(),
+    partialDataUrl: z.string().nullable()
+  } ).nullable()
+} );
+
+type CurrentBulkOperationData = z.infer<typeof CurrentBulkOperationDataSchema>;
+
 
 /********************************************************
  * Helpers
@@ -200,6 +220,33 @@ export class ShopifyGql {
 
   }
 
+  pollBulkOperationStatus( debug?: boolean ): Promise<CurrentBulkOperationData> {
+
+    return this.gqlRequest<CurrentBulkOperationData>({
+      debug: debug,
+      gqlQuery: `
+        {
+          currentBulkOperation {
+            id
+            status
+            type
+            query
+            errorCode
+            createdAt
+            completedAt
+            objectCount
+            rootObjectCount
+            fileSize
+            url
+            partialDataUrl
+          }
+        }
+      `,
+      dataSchema: CurrentBulkOperationDataSchema
+    });
+
+  }
+
   async scheduleBulkOperation( bulkQuery: string, debug: boolean = false ): Promise<BulkOperationData | null> {
 
     if( debug ) {
@@ -238,6 +285,5 @@ export class ShopifyGql {
     return resp.bulkOperationRunQuery.bulkOperation;
 
   }
-
 
 }
