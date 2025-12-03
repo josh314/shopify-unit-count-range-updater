@@ -1,0 +1,37 @@
+# Common configuration for all lambda services
+x-lambda-common: &lambda-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+
+  environment:
+    - AWS_REGION=us-east-1
+
+  env_file:
+    - .env
+
+  develop:
+    watch:
+      - action: sync+restart
+        path: ./dist
+        target: /var/task
+
+      - action: rebuild
+        path: package.json
+
+      - action: restart
+        path: .env
+
+  volumes:
+    - "~/.aws:/root/.aws:ro" # Mount AWS credentials for local testing. The :ro flag ensures that the container only reads the files without modifying them
+
+services:
+
+  schedule-shopify-bulk-query:
+    <<: *lambda-common
+    container_name: schedule-shopify-bulk-query
+    command: [ "ScheduleShopifyBulkQuery/index.handler" ]
+    ports:
+      - "8888:8080"
+
+

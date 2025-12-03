@@ -16,3 +16,60 @@ Valid values for `NODE_ENV` are `dev`, `prod`, or `local`. The value of `NODE_EN
 
 You must provide a `settings.ts` file in the project root. This file should default export an object of type `Settings` (see `types/index.ts` for this type definition) which contains the cloud for the application. 
 
+
+## Local development
+
+### TL;DR
+
+To work on the Lambda functions, run the dev script:
+
+```bash
+bash dev-lambda
+```
+
+which will watch for changes, build and run in Docker containers. To test an invocation, use the `driver.ts` script:
+
+```bash
+npx ts-node driver.ts
+```
+
+You will be prompted to choose which lambda you'd like to test and the script will invoke it with an appropriate payload. More on all these pieces below.
+
+
+### Building and bundling with `esbuild`
+
+The Lambda function is built/bundled with `esbuild` and emitted into `dist`. This is automatically done by CDK (with either `cdk deploy` or `cdk synth`), but you can also build manually by running the following command:
+
+```bash
+node esbuild.mjs
+```
+
+The configuration used in `esbuild.mjs` is chosen to mimic that of the CDK app in the development environment.
+
+### Docker
+
+For local development of the Lambda function, we have a Dockerfile and a compose file. The `Dockerfile` copies into the image the contents of the `dist` directory, so the Lambdas must be bundled before testing (see the [section on esbuild](#building-and-bundling-with-esbuild). To bring up a container, run a command like the following:
+
+```bash
+docker compose up 
+```
+
+I actually like to use the `--build` flag to ensure that the container is built fresh each time and redirect output to a file since it tends to clobber itself:
+
+```bash
+docker compose up --build > docker.log
+```
+
+Furthermore, you may want to run in watch mode, which will automatically rebuild the container when the contents of `dist` change. To do this, you can use the `--watch` flag:
+
+```bash
+docker compose up --build --watch > docker.log
+```
+
+To invoke a containerized lambda, you can use the following command:
+
+```
+curl -XPOST "http://localhost:<port>/2015-03-31/functions/function/invocations" -d @/path/to/event.json
+```
+
+Where each lambda is running on a different port between 8888 and 8891 (see the compose file). Each lambda has a corresponding event file in the `events` directory. You'll probably need to modify these to suit your needs. At any rate, use the `driver.ts` script to invoke the lambdas with a more user-friendly interface that keeps track of the correct port and event file for you. Use of `driver.ts` expects event files to be in `data/events/` directory.
