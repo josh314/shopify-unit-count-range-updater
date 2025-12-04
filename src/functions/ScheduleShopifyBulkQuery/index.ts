@@ -19,20 +19,12 @@ export const handler = async function(  ) {
         edges {
           node {
             id
-            createdAt
-            title
-            inventoryItem {
-              tracked
-              updatedAt
-            }
-            inventoryQuantity
             product {
               id
-              handle
-              publishedAt
-              status
-              title
-              tags
+            }
+            selectedOptions {
+              name
+              value
             }
             metafields {
               edges {
@@ -61,10 +53,11 @@ export const handler = async function(  ) {
     throw new Error(`No bulk operation found.`);
   }
 
-  const { status, id } = shopifyResp;
+  const { type, status, id } = shopifyResp;
 
   return {
     store: shopifyGql.store,
+    type,
     status,
     bulkOperationId: id,
   };

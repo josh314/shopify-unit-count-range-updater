@@ -51,6 +51,12 @@ const UserErrorsSchema = z.array( z.object( {
   message: z.string()
 } ) );
 
+const BulkOperationTypeSchema = z.enum( [
+  'MUTATION',
+  'QUERY'
+] );
+type BulkOperationType = z.infer<typeof BulkOperationTypeSchema>;
+
 const BulkOperationStatusSchema = z.enum( [
   'CANCELED',
   'CANCELING',
@@ -63,20 +69,31 @@ const BulkOperationStatusSchema = z.enum( [
 
 const BulkOperationDataSchema = z.object( {
   id: z.string(),
+  type: BulkOperationTypeSchema,
   status: BulkOperationStatusSchema,
-  query: z.string(),
-  errorCode: z.string().nullable()
+  url: z.string().nullable().optional(),
+  query: z.string().nullable().optional(),
+  errorCode: z.string().nullable().optional(),
 } );
 type BulkOperationData = z.infer<typeof BulkOperationDataSchema>;
 
+const BulkOperationRunQueryOrMutationDataSchema = z.object( {
+  bulkOperation: BulkOperationDataSchema.nullable(),
+  userErrors: UserErrorsSchema
+} );
+
 const BulkOperationRunQueryDataSchema = z.object( {
-  bulkOperationRunQuery: z.object( {
-    bulkOperation: BulkOperationDataSchema.nullable(),
-    userErrors: UserErrorsSchema
-  } )
+  bulkOperationRunQuery: BulkOperationRunQueryOrMutationDataSchema
 } );
 
 type BulkOperationRunQueryData = z.infer<typeof BulkOperationRunQueryDataSchema>;
+
+const BulkOperationRunMutationDataSchema = z.object( {
+  bulkOperationRunMutation: BulkOperationRunQueryOrMutationDataSchema
+} );
+
+type BulkOperationRunMutationData = z.infer<typeof BulkOperationRunMutationDataSchema>;
+
 
 // Note that some numerical fields like objectCount are strings in the Shopify API (see https://shopify.dev/docs/api/admin-graphql/latest/scalars/UnsignedInt64)
 const CurrentBulkOperationDataSchema = z.object( {
@@ -98,12 +115,38 @@ const CurrentBulkOperationDataSchema = z.object( {
 
 type CurrentBulkOperationData = z.infer<typeof CurrentBulkOperationDataSchema>;
 
+const StagedUploadsCreateDataSchema = z.object( {
+  stagedUploadsCreate: z.object( {
+    userErrors: UserErrorsSchema,
+    stagedTargets: z.array(
+      z.object( {
+        url: z.string(),
+        resourceUrl: z.string(),
+        parameters: z.array(
+          z.object( {
+            name: z.string(),
+            value: z.string()
+          } )
+        )
+      } )
+    )
+  } )
+} );
+
+type StagedUploadsCreateData = z.infer<typeof StagedUploadsCreateDataSchema>;
+
 
 /********************************************************
  * Helpers
  * =======
  *
  ******************/
+
+const GID_PATTERN = /gid:\/\/shopify\/([a-zA-Z]+)\/([0-9]+)/;
+export const getTypeFromGid = ( gid: string ) => {
+  const m = gid.match( GID_PATTERN );
+  return m && m[1];
+};
 
 // for pretty-printing in debug mode
 const prettyPrintGqlQuery = ( q: string ) => {
@@ -220,13 +263,13 @@ export class ShopifyGql {
 
   }
 
-  pollBulkOperationStatus( debug?: boolean ): Promise<CurrentBulkOperationData> {
+  pollBulkOperationStatus( type: BulkOperationType , debug?: boolean ): Promise<CurrentBulkOperationData> {
 
     return this.gqlRequest<CurrentBulkOperationData>({
       debug: debug,
       gqlQuery: `
         {
-          currentBulkOperation {
+          currentBulkOperation( type: ${ type } ) {
             id
             status
             type
@@ -260,6 +303,7 @@ export class ShopifyGql {
         ) {
           bulkOperation {
             id
+            type
             status
             query
             errorCode
@@ -283,6 +327,98 @@ export class ShopifyGql {
     }
 
     return resp.bulkOperationRunQuery.bulkOperation;
+
+  }
+
+  async createStagedUpload( filename: string, debug?: boolean ): Promise<StagedUploadsCreateData> {
+
+    const gqlQuery = `
+      mutation {
+        stagedUploadsCreate(input:[{
+          resource: BULK_MUTATION_VARIABLES,
+          filename: "${ filename }",
+          mimeType: "text/jsonl",
+          httpMethod: POST
+        }]){
+          userErrors {
+            field,
+            message
+          },
+          stagedTargets {
+            url,
+            resourceUrl,
+            parameters {
+              name,
+              value
+            }
+          }
+        }
+      }
+    `;
+
+    return this.gqlRequest<StagedUploadsCreateData>({
+      gqlQuery,
+      debug,
+      dataSchema: StagedUploadsCreateDataSchema
+    });
+
+  }
+
+  scheduleBulkProductVariantsUpdate( stagedUploadPath: string ) {
+
+    const mutationString = `
+      mutation call($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+        productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+          product {
+            id
+            title
+          }
+          userErrors {
+            message
+            field
+          }
+        }
+      }
+    `;
+
+    return this.scheduleBulkOperationMutation( { mutationString, stagedUploadPath } );
+
+  }
+
+  async scheduleBulkOperationMutation( options: { mutationString: string; stagedUploadPath: string; debug?: boolean } ): Promise<BulkOperationData | null>  {
+
+    const { mutationString, stagedUploadPath, debug } = options;
+
+    const gqlQuery = `
+      mutation {
+        bulkOperationRunMutation( mutation: "${ mutationString }", stagedUploadPath: "${ stagedUploadPath }" ) {
+          bulkOperation {
+            id
+            type
+            status
+            url
+            errorCode
+          }
+          userErrors {
+            message
+            field
+          }
+        }
+      }
+    `;
+
+    const resp = await this.gqlRequest<BulkOperationRunMutationData>({
+      gqlQuery,
+      debug,
+      dataSchema: BulkOperationRunMutationDataSchema
+    });
+
+
+    if( resp.bulkOperationRunMutation.userErrors.length > 0 ) {
+      throw new ShopifyUserErrorsError( resp.bulkOperationRunMutation.userErrors );
+    }
+
+    return resp.bulkOperationRunMutation.bulkOperation;
 
   }
 

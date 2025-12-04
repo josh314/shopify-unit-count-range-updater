@@ -9,14 +9,16 @@ interface Response {
 
 const POLL_RESULTS_INTERVAL_MINUTES = parseInt( process.env.POLL_RESULTS_INTERVAL_MINUTES || '5' );
 
-export const handler = async function( ) {
+export const handler = async function( event: { type: 'QUERY' | 'MUTATION' } ): Promise<Response> {
 
   console.info("Lambda function executed: PollShopifyBulkQueryResults");
+
+  const { type } = event;
 
   const shopifyGql = await initializeShopifyGql();
 
   const debug = process.env.DEBUG === 'true' || process.env.DEBUG === '1';
-  const result = await shopifyGql.pollBulkOperationStatus( debug );
+  const result = await shopifyGql.pollBulkOperationStatus( type, debug );
 
   console.info(`Shopify response:`);
   console.info(result);
@@ -38,22 +40,24 @@ export const handler = async function( ) {
     }
   );
 
+  const messageType = type.toLowerCase();
+
   if( status === 'CANCELED' || status === 'EXPIRED' || status === 'FAILED' ) {
 
-    response.message = "Bulk query failed. Restarting.";
+    response.message = `Bulk ${ messageType } failed. Restarting.`;
 
   }
   else if( status === 'COMPLETED' ) {
 
-    response.message = "Bulk query results ready.";
+    response.message = `Bulk ${ messageType } results ready.`;
     response.url = url;
 
   }
   else {
 
     const when = new Date( Date.now() + POLL_RESULTS_INTERVAL_MINUTES * 60 * 1000 );
-    console.info(`Bulk query results not ready yet. Polling again at ${ when.toString() }`);
-    response.message = "Bulk query results not ready yet.";
+    console.info(`Bulk ${ messageType } results not ready yet. Polling again at ${ when.toString() }`);
+    response.message = `Bulk ${ messageType } results not ready yet.`;
 
   }
 
