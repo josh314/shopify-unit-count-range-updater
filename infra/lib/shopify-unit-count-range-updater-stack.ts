@@ -220,7 +220,8 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
             throw new Error( `Secret configuration not found for secret id: ${ lambdaConfigSecret }` );
           }
 
-          fn.addEnvironment( secretConfig.envvar, secret.secretValue.unsafeUnwrap() );
+          secret.grantRead( fn );
+          fn.addEnvironment( secretConfig.envvar, secretConfig.name );
 
         }
       }
@@ -259,6 +260,53 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
     const pollBulkOperationStatus = this.createLambdaTask( 'PollBulkOperationStatus' );
     const processQueryResultsAndScheduleMutation = this.createLambdaTask( 'ProcessQueryResultsAndScheduleMutation' );
 
+    const waitThenPoll = sfn.Wait.jsonata( this, 'WaitToPoll', {
+      time: sfn.WaitTime.duration( cdk.Duration.minutes( 5 ) ),
+    })
+      .next( pollBulkOperationStatus )
+      .next( sfn.Pass.jsonata( this, 'AssignBulkOperationVars', {
+        assign: {
+          bulkOperationType: '{% $states.input.type %}',
+          bulkOperationStatus: '{% $states.input.status %}',
+        },
+      }) );
+
+    const checkMutationForNoop = sfn.Choice.jsonata( this, 'CheckForNoop' );
+    checkMutationForNoop.when( sfn.Condition.jsonata( "{% $states.input.status = 'NO-OP' %}" ), new sfn.Succeed( this, `${stateMachineName}__GracefullyExit:No-op`, {
+      stateName: 'GracefullyExit:No-op',
+      outputs: {
+        cause:  "Exited: No operation needed.",
+      }
+    }) );
+    checkMutationForNoop.otherwise( waitThenPoll );
+
+    const processQueryResultsAndScheduleMutationAndCheckForNoop = processQueryResultsAndScheduleMutation.next( checkMutationForNoop );
+
+    // choice state based upon operation type.
+    const checkBulkOperationType = sfn.Choice.jsonata( this, 'CheckBulkOperationType' );
+    checkBulkOperationType.when( sfn.Condition.jsonata( "{% $bulkOperationType = 'QUERY' %}" ), processQueryResultsAndScheduleMutationAndCheckForNoop );
+    checkBulkOperationType.when( sfn.Condition.jsonata( "{% $bulkOperationType = 'MUTATION' %}" ), new sfn.Succeed( this, `${stateMachineName}__GracefullyExit:Finished`, {
+      stateName: 'GracefullyExit:Finished',
+      outputs: {
+        cause:  "Exited: finished update.",
+      }
+    }) );
+    checkBulkOperationType.otherwise(
+      sfn.Pass.jsonata(this, `${ stateMachineName }__SetUnknownOperationTypeCause`, {
+        stateName: 'SetUnknownOperationTypeCause',
+        outputs: {
+          Cause: 'Unknown bulk operation type',
+        }
+      })
+        .next( this.notifyOnFailureTask )
+    );
+
+    // choice state based upon bulk operation status.
+    const checkBulkOperationStatus = sfn.Choice.jsonata( this, 'CheckBulkOperationStatus' );
+    checkBulkOperationStatus.when( sfn.Condition.jsonata( "{% $bulkOperationStatus = 'COMPLETED' %}" ), checkBulkOperationType );
+    checkBulkOperationStatus.when( sfn.Condition.jsonata( "{% $bulkOperationStatus in [ 'CANCELED', 'CANCELING', 'EXPIRED', 'FAILED' ] %}" ), scheduleBulkQuery );
+    checkBulkOperationStatus.otherwise( waitThenPoll );
+
     // Define the start sequence which guards against concurrent executions of the state machine
     const start =
       sfn.Pass.jsonata( this, `${stateMachineName}__Start`, {
@@ -266,7 +314,10 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
         outputs: {
           stateMachineArn: '{% $states.context.StateMachine.Id %}',
         }
-      });
+      })
+        .next( scheduleBulkQuery )
+        .next( waitThenPoll )
+        .next( checkBulkOperationStatus );
 
 
     // Define the state machine
