@@ -32,11 +32,11 @@ export interface SecretConfiguration {
 };
 
 /** Legal names for the project's lambda functions */
-export type LambdaId = '';
+export type LambdaId = 'ScheduleShopifyBulkQuery' | 'PollShopifyBulkOperationStatus' | 'ProcessQueryResultsAndScheduleMutation';
 
 // Define the type for lambda configurations
 export interface LambdaConfiguration {
   id: LambdaId;
-  dir: string;
+  envvars?: { [key: string]: string | number };
   secrets?: SecretId[];
 }

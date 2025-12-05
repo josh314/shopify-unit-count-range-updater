@@ -11,36 +11,17 @@ import { initializeShopifyGql, getTypeFromGid } from '../../lib/shopify';
  *
  ****************/
 
-const baseShape = {
-  id: z.string(),
-};
+import {
+  QueryResultsObjectSchema,
+  MetafieldSchema,
+  ProductVariantSchema,
+} from '@schemas';
 
-const QueryResultsObjectSchema = z.looseObject( baseShape );
-type QueryResultsObject = z.infer<typeof QueryResultsObjectSchema>;
+import {
+  ProductVariant,
+  BulkOperationLambdaResponse,
+} from '@types';
 
-const MetafieldSchema = z.strictObject( {
-  ...baseShape,
-  __parentId: z.string(),
-  namespace: z.string(),
-  key: z.string(),
-  value: z.string(),
-  type: z.string(),
-} );
-
-const ProductVariantSchema = z.strictObject( {
-  ...baseShape,
-  product: z.object( {
-    id: z.string(),
-  } ),
-  metafields: z.array( MetafieldSchema ).optional(),
-  selectedOptions: z.array(
-    z.object( {
-      name: z.string(),
-      value: z.string(),
-    })
-  )
-} );
-type ProductVariant = z.infer<typeof ProductVariantSchema>;
 
 /*********************************************************
  * Helpers
@@ -58,7 +39,7 @@ async function collateQueryResults( queryResultsStream: NodeJS.ReadableStream ):
   const variants: ProductVariant[] = [];
   for await ( const line of rl ) {
 
-    const obj: QueryResultsObject = QueryResultsObjectSchema.parse( JSON.parse( line.toString() ) );
+    const obj = QueryResultsObjectSchema.parse( JSON.parse( line.toString() ) );
 
     const type = getTypeFromGid( obj.id );
     if( type === 'ProductVariant' ) {
@@ -182,7 +163,7 @@ function createBulkMutationForVariants( variants: ProductVariant[] ): string {
  *
  ******************/
 
-export const handler = async function( event: { url: string } ) {
+export const handler = async function( event: { url: string } ): Promise<BulkOperationLambdaResponse> {
 
   console.log("Lambda function executed: process-query-results-and-schedule-mutation");
 
@@ -197,17 +178,22 @@ export const handler = async function( event: { url: string } ) {
   } );
 
   const variants = await collateQueryResults( z.instanceof(Readable).parse(queryResults.data) );
+  console.log( `Collated ${ variants.length } variants from query results.` );
 
   const mutations = createBulkMutationForVariants( variants );
 
-  if( !mutations || mutations.length === 0 ) {
+  const numberOfMutations = mutations ? mutations.split( '\n' ).filter( line => line.trim().length > 0 ).length : 0;
+  if( !numberOfMutations ) {
     console.log( `No mutations to process. Exiting.` );
     return {
       store: shopifyGql.store,
       type: 'MUTATION',
-      status: 'NONE',
+      status: 'NO-OP',
       bulkOperationId: null,
     };
+  }
+  else {
+    console.log( `Created mutations for ${ numberOfMutations } variants.` );
   }
 
   const mutationsFilename = 'bulk-mutation.jsonl';

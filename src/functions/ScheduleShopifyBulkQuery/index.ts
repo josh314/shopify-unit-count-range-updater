@@ -1,15 +1,11 @@
 import { initializeShopifyGql } from '../../lib/shopify';
-import type { ShopifyGql } from '../../lib/shopify';
+import type { BulkOperationLambdaResponse } from '@types';
 
-let shopifyGql: ShopifyGql;
-
-export const handler = async function(  ) {
+export const handler = async function(  ): Promise<BulkOperationLambdaResponse> {
 
   console.log("Lambda function executed: ScheduleShopifyBulkQuery");
 
-  if( !shopifyGql ) {
-    shopifyGql = await initializeShopifyGql();
-  }
+  const shopifyGql = await initializeShopifyGql();
 
   console.log('Initiating new shopify export sequence now...');
 

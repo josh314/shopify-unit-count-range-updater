@@ -1,5 +1,4 @@
 import axios from 'axios';
-import * as z from 'zod/v4';
 
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
 const secretsClient = new SecretsManagerClient({ region: process.env.AWS_REGION });
@@ -10,131 +9,27 @@ const secretsClient = new SecretsManagerClient({ region: process.env.AWS_REGION 
  *
  ****************/
 
-/** Schema for the SSM containing Shopify secrets*/
-const ShopifySecretSchema = z.object({
-  store: z.string(),
-  accessToken: z.string(),
-  apiVersion: z.string().optional(),
-});
+import {
+  ShopifySecretSchema,
+  BulkOperationRunQueryDataSchema,
+  BulkOperationRunMutationDataSchema,
+  CurrentBulkOperationDataSchema,
+  StagedUploadsCreateDataSchema,
 
-const shopifyGraphQlErrorSchema = z.object( {
-  message: z.string(),
-  locations: z.array(
-    z.object( {
-      line: z.number(),
-      column: z.number()
-    } )
-  ).optional(),
-  path: z.array(
-    z.union( [ z.string(), z.number() ] )
-  ).optional(),
-  extensions: z.record( z.string(), z.unknown() ).optional()
-} );
+  // factory function
+  ShopifyGqlResponseSchemaFactory
+} from '@schemas';
 
-type ShopifyGraphQlError = z.infer<typeof shopifyGraphQlErrorSchema>;
-
-const makeShopifyGqlResponseSchema = <TData>( dataSchema: z.ZodType<TData> ) =>
-  z.looseObject( {
-    data: dataSchema.optional(),
-    errors: z.array( shopifyGraphQlErrorSchema ).optional(),
-  } );
-
-interface GqlRequestOptions<TData> {
-  readonly gqlQuery: string;
-  readonly variables?: Record<string, unknown>;
-  readonly dataSchema: z.ZodType<TData>;
-  readonly debug?: boolean;
-}
-
-const UserErrorsSchema = z.array( z.object( {
-  field: z.array( z.string() ).nullable(),
-  message: z.string()
-} ) );
-
-const BulkOperationTypeSchema = z.enum( [
-  'MUTATION',
-  'QUERY'
-] );
-type BulkOperationType = z.infer<typeof BulkOperationTypeSchema>;
-
-const BulkOperationStatusSchema = z.enum( [
-  'CANCELED',
-  'CANCELING',
-  'COMPLETED',
-  'CREATED',
-  'EXPIRED',
-  'FAILED',
-  'RUNNING'
-] );
-
-const BulkOperationDataSchema = z.object( {
-  id: z.string(),
-  type: BulkOperationTypeSchema,
-  status: BulkOperationStatusSchema,
-  url: z.string().nullable().optional(),
-  query: z.string().nullable().optional(),
-  errorCode: z.string().nullable().optional(),
-} );
-type BulkOperationData = z.infer<typeof BulkOperationDataSchema>;
-
-const BulkOperationRunQueryOrMutationDataSchema = z.object( {
-  bulkOperation: BulkOperationDataSchema.nullable(),
-  userErrors: UserErrorsSchema
-} );
-
-const BulkOperationRunQueryDataSchema = z.object( {
-  bulkOperationRunQuery: BulkOperationRunQueryOrMutationDataSchema
-} );
-
-type BulkOperationRunQueryData = z.infer<typeof BulkOperationRunQueryDataSchema>;
-
-const BulkOperationRunMutationDataSchema = z.object( {
-  bulkOperationRunMutation: BulkOperationRunQueryOrMutationDataSchema
-} );
-
-type BulkOperationRunMutationData = z.infer<typeof BulkOperationRunMutationDataSchema>;
-
-
-// Note that some numerical fields like objectCount are strings in the Shopify API (see https://shopify.dev/docs/api/admin-graphql/latest/scalars/UnsignedInt64)
-const CurrentBulkOperationDataSchema = z.object( {
-  currentBulkOperation: z.object( {
-    id: z.string(),
-    status: BulkOperationStatusSchema,
-    type: z.string(),
-    query: z.string(),
-    errorCode: z.string().nullable(),
-    createdAt: z.string(),
-    completedAt: z.string().nullable(),
-    objectCount: z.string().nullable(),
-    rootObjectCount: z.string().nullable(),
-    fileSize: z.string().nullable(),
-    url: z.string().nullable(),
-    partialDataUrl: z.string().nullable()
-  } ).nullable()
-} );
-
-type CurrentBulkOperationData = z.infer<typeof CurrentBulkOperationDataSchema>;
-
-const StagedUploadsCreateDataSchema = z.object( {
-  stagedUploadsCreate: z.object( {
-    userErrors: UserErrorsSchema,
-    stagedTargets: z.array(
-      z.object( {
-        url: z.string(),
-        resourceUrl: z.string(),
-        parameters: z.array(
-          z.object( {
-            name: z.string(),
-            value: z.string()
-          } )
-        )
-      } )
-    )
-  } )
-} );
-
-type StagedUploadsCreateData = z.infer<typeof StagedUploadsCreateDataSchema>;
-
+import {
+  BulkOperationType,
+  BulkOperationData,
+  BulkOperationRunQueryData,
+  BulkOperationRunMutationData,
+  CurrentBulkOperationData,
+  StagedUploadsCreateData,
+  ShopifyGraphQlError,
+  GqlRequestOptions
+} from '@types';
 
 /********************************************************
  * Helpers
@@ -247,7 +142,7 @@ export class ShopifyGql {
       responseType: 'json'
     } );
 
-    const envelopeSchema = makeShopifyGqlResponseSchema( dataSchema );
+    const envelopeSchema = ShopifyGqlResponseSchemaFactory( dataSchema );
 
     const parsed = envelopeSchema.parse( resp.data );
 

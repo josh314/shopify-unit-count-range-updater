@@ -1,15 +1,10 @@
 import { initializeShopifyGql } from '../../lib/shopify';
 
-interface Response {
-  status?: string;
-  bulkOperationId?: string;
-  url?: string | null;
-  message?: string;
-}
+import type { BulkOperationLambdaResponse } from '@types';
 
 const POLL_RESULTS_INTERVAL_MINUTES = parseInt( process.env.POLL_RESULTS_INTERVAL_MINUTES || '5' );
 
-export const handler = async function( event: { type: 'QUERY' | 'MUTATION' } ): Promise<Response> {
+export const handler = async function( event: { type: 'QUERY' | 'MUTATION' } ): Promise<BulkOperationLambdaResponse> {
 
   console.info("Lambda function executed: PollShopifyBulkQueryResults");
 
@@ -31,9 +26,11 @@ export const handler = async function( event: { type: 'QUERY' | 'MUTATION' } ): 
 
   const { status, id, url } = currentBulkOperation;
 
-  const response: Response =  Object.assign(
+  const response: BulkOperationLambdaResponse = Object.assign(
     {},
     {
+      store: shopifyGql.store,
+      type,
       status,
       bulkOperationId: id,
       url
