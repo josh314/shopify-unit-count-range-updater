@@ -27,17 +27,17 @@ x-lambda-common: &lambda-common
 
 services:
 
-  schedule-shopify-bulk-query:
+  schedule-bulk-query:
     <<: *lambda-common
-    container_name: schedule-shopify-bulk-query
-    command: [ "ScheduleShopifyBulkQuery/index.handler" ]
+    container_name: schedule-bulk-query
+    command: [ "ScheduleBulkQuery/index.handler" ]
     ports:
       - "8888:8080"
 
-  poll-shopify-bulk-operation-status:
+  poll-bulk-operation-status:
     <<: *lambda-common
-    container_name: poll-shopify-bulk-operation-status
-    command: [ "PollShopifyBulkOperationStatus/index.handler" ]
+    container_name: poll-bulk-operation-status
+    command: [ "PollBulkOperationStatus/index.handler" ]
     ports:
       - "8889:8080"
 

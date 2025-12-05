@@ -6,8 +6,8 @@ import fs from 'fs';
 import axios from 'axios';
 
 const lambdas = [
-  'schedule-shopify-bulk-query',
-  'poll-shopify-bulk-operation-status',
+  'schedule-bulk-query',
+  'poll-bulk-operation-status',
   'process-query-results-and-schedule-mutation',
 ];
 
