@@ -1,11 +1,10 @@
 import * as fs from 'fs';
 
-import { PackageJson } from '@schemas';
-
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import * as s3 from 'aws-cdk-lib/aws-s3';
-import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambdaNodejs from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as subscriptions from 'aws-cdk-lib/aws-sns-subscriptions';
@@ -15,19 +14,32 @@ import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as events_targets from 'aws-cdk-lib/aws-events-targets';
 
+/***************************************************************************
+ * Types and schemas
+ * =================
+ *
+ ***************************************************************************/
+
 import type { StackData } from './stack-data';
 
-import type { Env, EnvSettings, } from '@types';
+import type { Env, LambdaId } from '@types';
+
+import { PackageJson } from '@schemas';
 
 interface ShopifyUnitRangeUpdaterStackProps extends cdk.StackProps {
 
   stackEnv: Env,
-  envSettings: EnvSettings,
   stackData: StackData,
 
 }
 
 type StateMachineName = 'ShopifyUnitCountRangeUpdater';
+
+/***************************************************************************
+ * Stack
+ * =====
+ *
+ ***************************************************************************/
 
 export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
 
@@ -40,9 +52,7 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
 
   notificationTopic: sns.Topic;
   logGroup: logs.LogGroup;
-  vpc: ec2.IVpc;
-  bucketName: string;
-  bucket: s3.IBucket;
+  functions: Map<string,lambdaNodejs.NodejsFunction>;
 
   // we save a single notifyOnFailureTask so that the same task can be used for multiple lambdas
   notifyOnFailureTask: sfn.IChainable;
@@ -53,10 +63,6 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
 
     const {
       stackEnv,
-      envSettings: {
-        vpcId,
-        vpcName,
-      },
       stackData
     } = props || {};
 
@@ -64,14 +70,8 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
     this.isProduction = !!( this.stackEnv && Array.isArray( this.stackEnv.match( 'prod' ) ) );
 
     this.stackData = stackData;
-
     this.stateMachineName = 'ShopifyUnitCountRangeUpdater';
-
-    this.bucketName = this.getBucketName();
-    this.bucket = this.setBucket();
-    this.vpc = this.setVpc( { vpcId, vpcName } );
     this.notificationTopic = this.configureNotificationTopic();
-
     this.notifyOnFailureTask = this.createNotifyOnFailureTask( );
 
     // Create a CloudWatch Log Group for Step Function Logs
@@ -80,6 +80,8 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
       retention: logs.RetentionDays.ONE_WEEK, // Set log retention period
       removalPolicy: this.isProduction ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });
+
+    this.functions = this.configureLambdas( );
 
     this.createStateMachine( );
 
@@ -91,65 +93,24 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
 
   }
 
+  getSecrets() {
 
-  getBucketName() {
-    if ( this.isProduction ) {
-      return 'expresshop-shopify-unit-count-range-updater';
+    const secrets = new Map<string,secretsmanager.ISecret>();
+
+    for( const config of this.stackData.secretConfigurations ) {
+
+      const secret = secretsmanager.Secret.fromSecretNameV2( this, `Secret__${ config.id }`, config.name );
+      secrets.set( config.id, secret );
+
     }
-    else if ( process.env.AWS_PROFILE ) {
-      return `expresshop-shopify-unit-count-range-updater--${ process.env.AWS_PROFILE }`;
-    }
-    else {
-      return `expresshop-shopify-unit-count-range-updater--${ this.stackEnv }`;
-    }
+
+    return secrets;
+
   }
 
   stateMachineArnFromName( smName: StateMachineName ) {
     const stack = cdk.Stack.of(this);
     return `arn:aws:states:${ stack.region }:${ stack.account }:stateMachine:${ smName }`;
-  }
-
-  setBucket() {
-
-    // create a Bucket for the application
-    const bucket = new s3.Bucket( this, 'ShopifyUnitCountRangeUpdaterBucket', {
-      bucketName: this.bucketName,
-      eventBridgeEnabled: true,
-      lifecycleRules: [
-        {
-          expiration: cdk.Duration.days( 10 ),
-        }
-      ],
-      ...(
-        this.isProduction ?
-          { removalPolicy: cdk.RemovalPolicy.RETAIN } :
-          { removalPolicy: cdk.RemovalPolicy.DESTROY, autoDeleteObjects: true }
-      ),
-    });
-
-    return bucket;
-  }
-
-  setVpc( { vpcId, vpcName }: { vpcId?: string, vpcName?: string } ) {
-
-    // Determine VPC lookup strategy
-    let vpcLookupOptions: ec2.VpcLookupOptions;
-
-    if ( vpcId ) {
-      vpcLookupOptions = { vpcId };
-    } else if ( vpcName ) {
-      vpcLookupOptions = { vpcName };
-    } else {
-      // Default to the AWS account's default VPC
-      console.log('No VPC ID or name specified, deploying into the default VPC.');
-      vpcLookupOptions = { isDefault: true };
-    }
-    // Lookup the VPC
-    const vpc = ec2.Vpc.fromLookup( this, 'Vpc', vpcLookupOptions );
-
-    this.vpc = vpc;
-
-    return vpc;
   }
 
   configureNotificationTopic() {
@@ -199,9 +160,104 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
 
   }
 
+  configureLambdas( ) {
+
+    const secrets = this.getSecrets();
+
+    const { logGroup } = this;
+
+    const functions = this.stackData.lambdaConfigurations.reduce( ( acc, config ) => {
+
+      const environment = {
+        ...( this.isProduction ? {} : { NODE_OPTIONS: '--enable-source-maps' } ),
+        NODE_ENV: this.stackEnv,
+      };
+
+      const bundlingOpts: cdk.aws_lambda_nodejs.BundlingOptions = {
+        minify: this.isProduction,
+        commandHooks: {
+          beforeBundling() {
+            return [];
+          },
+          afterBundling( _inputDir: string, outputDir: string ): string[] { // makes a local copy of the output bundle for testing purposes
+            return [
+              `mkdir -p dist`,
+              `cp -r ${outputDir}/* dist/`,
+            ];
+          },
+          beforeInstall() {
+            return [];
+          },
+        },
+        sourceMap: !this.isProduction,
+        ...( !this.isProduction ? { sourceMapMode: cdk.aws_lambda_nodejs.SourceMapMode.BOTH } : {} ),
+      };
+
+      const fnProperties = {
+        functionName: `${ config.id }`,
+        description: `Component of the Product Data Updater application`,
+        runtime: lambda.Runtime.NODEJS_24_X,
+        entry: `src/functions/${config.id}/index.ts`,
+        handler: 'handler',
+        logGroup,
+        environment,
+        bundling: bundlingOpts,
+
+        timeout: cdk.Duration.minutes( 15 ),
+      };
+
+      const fn = new lambdaNodejs.NodejsFunction( this, config.id, fnProperties );
+
+      if( config.secrets ) {
+
+        for( const lambdaConfigSecret of config.secrets ) {
+
+          const secret = secrets.get( lambdaConfigSecret );
+
+          const secretConfig = this.stackData.secretConfigurations.find( sc => sc.id === lambdaConfigSecret );
+
+          if( !secret || !secretConfig ) {
+            throw new Error( `Secret configuration not found for secret id: ${ lambdaConfigSecret }` );
+          }
+
+          fn.addEnvironment( secretConfig.envvar, secret.secretValue.unsafeUnwrap() );
+
+        }
+      }
+
+      acc.set( config.id, fn );
+
+      return acc;
+    }, new Map<string,lambdaNodejs.NodejsFunction>() );
+
+    return functions;
+  }
+
+  createLambdaTask( lambdaId: LambdaId ) {
+
+    // Define the lambda invocation task
+    return tasks.LambdaInvoke.jsonata( this, `${lambdaId}Lambda`, {
+      stateName: `${lambdaId}Task`, // we just give the short name here
+      lambdaFunction: this.functions.get( lambdaId )!,
+      outputs: "{% $states.result.Payload %}"
+    })
+      .addRetry( {
+        errors: [ 'States.ALL' ],
+        interval: cdk.Duration.minutes( 1 ),
+        maxAttempts: 3,
+      } )
+      .addCatch( this.notifyOnFailureTask );
+
+  }
+
   createStateMachine() {
 
     const stateMachineName = this.stateMachineName;
+
+    //define a task for each lambda function
+    const scheduleBulkQuery = this.createLambdaTask( 'ScheduleBulkQuery' );
+    const pollBulkOperationStatus = this.createLambdaTask( 'PollBulkOperationStatus' );
+    const processQueryResultsAndScheduleMutation = this.createLambdaTask( 'ProcessQueryResultsAndScheduleMutation' );
 
     // Define the start sequence which guards against concurrent executions of the state machine
     const start =

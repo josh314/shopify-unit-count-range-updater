@@ -11,17 +11,6 @@ export function isEnv(key: string | undefined ): key is Env {
   return ( envs as readonly string[] ).includes( key );
 }
 
-/** Environment-specific AWS settings */
-export interface EnvSettings {
-  vpcId?: string;
-  vpcName?: string;
-}
-
-/** Settings for each environment */
-export type Settings = {
-  [K in Env]: EnvSettings;
-};
-
 /** Legal values for secret names */
 export type SecretId = 'shopify';
 

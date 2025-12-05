@@ -1,9 +1,12 @@
-import type { Env, SecretConfiguration } from '@types';
+import type { Env, SecretConfiguration, LambdaConfiguration } from '@types';
+
+const POLL_RESULTS_INTERVAL_MINUTES = 5;
 
 export class StackData {
 
   stackEnv: Env;
   secretConfigurations: SecretConfiguration[];
+  lambdaConfigurations: LambdaConfiguration[];
 
   constructor( stackEnv: Env ) {
 
@@ -14,6 +17,30 @@ export class StackData {
         id: 'shopify',
         name: `${stackEnv }/shopify-unit-count-range-updater/shopify`,
         envvar: 'SHOPIFY_SECRET_NAME',
+      },
+    ];
+
+    this.lambdaConfigurations = [
+      {
+        id: 'ScheduleBulkQuery',
+        secrets: [
+          'shopify'
+        ],
+      },
+      {
+        id: 'PollBulkOperationStatus',
+        envvars: {
+          POLL_RESULTS_INTERVAL_MINUTES
+        },
+        secrets: [
+          'shopify'
+        ],
+      },
+      {
+        id: 'ProcessQueryResultsAndScheduleMutation',
+        secrets: [
+          'shopify'
+        ],
       },
     ];
 
