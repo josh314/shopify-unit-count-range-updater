@@ -22,13 +22,14 @@ import * as events_targets from 'aws-cdk-lib/aws-events-targets';
 
 import type { StackData } from './stack-data';
 
-import type { Env, LambdaId } from '@types';
+import type { Env, EnvSettings, LambdaId } from '@types';
 
 import { PackageJson } from '@schemas';
 
 interface ShopifyUnitRangeUpdaterStackProps extends cdk.StackProps {
 
   stackEnv: Env,
+  envSettings: EnvSettings,
   stackData: StackData,
 
 }
@@ -57,13 +58,18 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
   // we save a single notifyOnFailureTask so that the same task can be used for multiple lambdas
   notifyOnFailureTask: sfn.IChainable;
 
+  stateMachine: sfn.StateMachine;
+
   constructor( scope: Construct, id: string, props: ShopifyUnitRangeUpdaterStackProps ) {
 
     super( scope, id, props );
 
     const {
       stackEnv,
-      stackData
+      envSettings: {
+        stateMachineCron
+      },
+      stackData,
     } = props || {};
 
     this.stackEnv = stackEnv;
@@ -83,7 +89,9 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
 
     this.functions = this.configureLambdas( );
 
-    this.createStateMachine( );
+    this.stateMachine = this.createStateMachine( );
+
+    this.configureStateMachineCron( stateMachineCron );
 
     // Add tags to stack
     const { version } = PackageJson.parse(
@@ -333,22 +341,22 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
       },
     });
 
+    return stateMachine;
+
+  }
+
+  configureStateMachineCron( cronSchedule: events.CronOptions) {
+
     new events.Rule( this, 'ShopifyUnitCountRangeUpdaterSMCron', {
       ruleName: 'ShopifyUnitCountRangeUpdaterSMCron',
       description: 'Rule to trigger the ShopifyUnitCountRangeUpdater state machine on a schedule',
-      schedule: events.Schedule.cron({
-        minute: '0',
-        hour: '0',
-        day: '*',
-        month: '*',
-        year: '*',
-      }),
+      schedule: events.Schedule.cron(
+        cronSchedule
+      ),
     })
       .addTarget(
-        new events_targets.SfnStateMachine( stateMachine )
+        new events_targets.SfnStateMachine( this.stateMachine )
       );
-
-    return stateMachine;
 
   }
 

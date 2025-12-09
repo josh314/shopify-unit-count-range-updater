@@ -10,6 +10,8 @@ const nodeEnv = isEnv( rawNodeEnv ) ? rawNodeEnv : 'dev';
 import { StackData } from './lib/stack-data';
 const stackData = new StackData( nodeEnv );
 
+import settings from '../settings';
+
 async function preFlight() {
 
   console.log( 'Running pre-flight checks...' );
@@ -56,6 +58,7 @@ function main() {
     env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
 
     stackEnv: nodeEnv,
+    envSettings: settings[ nodeEnv ],
     stackData: stackData,
 
   });
