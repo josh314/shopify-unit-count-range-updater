@@ -1,0 +1,9 @@
+stages:
+  - test
+
+linting:
+  stage: test
+  image: node:24
+  script:
+    - npm ci
+    - npm run lint
