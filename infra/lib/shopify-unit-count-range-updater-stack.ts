@@ -98,6 +98,7 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
       JSON.parse( fs.readFileSync('package.json', 'utf8') )
     );
     cdk.Tags.of( this ).add( 'StackVersion', version );
+    cdk.Tags.of( this ).add( 'StackEnv', this.stackEnv );
 
   }
 
@@ -203,7 +204,7 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
 
       const fnProperties = {
         functionName: `${ config.id }`,
-        description: `Component of the Product Data Updater application`,
+        description: `Component of the Shopify Unit Count Range Updater application`,
         runtime: lambda.Runtime.NODEJS_24_X,
         entry: `src/functions/${config.id}/index.ts`,
         handler: 'handler',
