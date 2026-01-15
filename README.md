@@ -9,12 +9,21 @@ Before deploying this stack, you need to set up the following AWS resources:
 
 The API credentials secret should be specific to this application so as to not cause collisions with other bulk operations you may be performing against the Shopify API.
 
-## `settings.ts` and `NODE_ENV`
+## `NODE_ENV`
 
-Valid values for `NODE_ENV` are `dev`, `prod`, or `local`. The value of `NODE_ENV` determines the environment in which the application is running and affects the configuration and behavior of the application. `local` is like `dev`, but is used for local testing of the lambda function without deploying to AWS.
+Valid values for `NODE_ENV` are `dev` or `prod`. The value of `NODE_ENV` determines the environment in which the application is running and affects the configuration and behavior of the application.
 
-You must provide a `settings.ts` file in the project root. This file should default export an object of type `Settings` (see `types/infra.ts` for this type definition) which contains the cloud settings for the application. 
+## Settings for CDK
 
+There are two ways to provide settings to the CDK application. For local development and usage, it is easiest to use a JSON file whose path is specified in the `SETTINGS_PATH` environment variable, for instance,
+
+```bash
+SETTINGS_PATH=./settings.json cdk synth
+```
+
+For CI/CD and production deployments, it is preferable to provide the settings as a JSON string in the `SETTINGS_JSON` environment variable. This latter option is, of course, also available for local development, but is less convenient.
+
+The settings schema is defined in `schemas/infra.ts` and -- no matter its source -- the parsed JSON should conform to that schema.
 
 ## Local development
 

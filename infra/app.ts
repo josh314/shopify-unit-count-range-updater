@@ -3,14 +3,16 @@ import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-sec
 
 import { ShopifyUnitRangeUpdaterStack } from 'lib/shopify-unit-count-range-updater-stack';
 import { isEnv } from '@types';
+import { loadSettings } from './lib/load-settings';
+import { StackData } from './lib/stack-data';
 
 const rawNodeEnv = process.env.NODE_ENV;
 const nodeEnv = isEnv( rawNodeEnv ) ? rawNodeEnv : 'dev';
 
-import { StackData } from './lib/stack-data';
-const stackData = new StackData( nodeEnv );
+const settings = loadSettings();
+const envSettings = settings[ nodeEnv ];
 
-import settings from '../settings';
+const stackData = new StackData( nodeEnv );
 
 async function preFlight() {
 
@@ -58,7 +60,7 @@ function main() {
     env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
 
     stackEnv: nodeEnv,
-    envSettings: settings[ nodeEnv ],
+    envSettings,
     stackData: stackData,
 
   });
