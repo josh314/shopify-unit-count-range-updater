@@ -22,9 +22,12 @@ import * as events_targets from 'aws-cdk-lib/aws-events-targets';
 
 import type { StackData } from './stack-data';
 
-import type { Env, EnvSettings, LambdaId } from '@types';
+import type { Env, LambdaId } from '@types';
 
-import { PackageJson } from '@schemas';
+import {
+  PackageJson,
+  type EnvSettings,
+} from '@schemas';
 
 interface ShopifyUnitRangeUpdaterStackProps extends cdk.StackProps {
 
