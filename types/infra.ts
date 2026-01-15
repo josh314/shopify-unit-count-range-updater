@@ -1,4 +1,4 @@
-export const envs = [ 'prod', 'dev' ] as const;
+export const envs = [ 'production', 'development' ] as const;
 
 /** Legal values for environment */
 export type Env = typeof envs[ number ];

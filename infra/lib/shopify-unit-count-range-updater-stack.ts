@@ -14,6 +14,8 @@ import * as tasks from 'aws-cdk-lib/aws-stepfunctions-tasks';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as events_targets from 'aws-cdk-lib/aws-events-targets';
 
+import { getEnvShortName } from './utils';
+
 /***************************************************************************
  * Types and schemas
  * =================
@@ -76,7 +78,7 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
     } = props || {};
 
     this.stackEnv = stackEnv;
-    this.isProduction = !!( this.stackEnv && Array.isArray( this.stackEnv.match( 'prod' ) ) );
+    this.isProduction = ( this.stackEnv === 'production' );
 
     this.stackData = stackData;
     this.stateMachineName = 'ShopifyUnitCountRangeUpdater';
@@ -85,7 +87,7 @@ export class ShopifyUnitRangeUpdaterStack extends cdk.Stack {
 
     // Create a CloudWatch Log Group for Step Function Logs
     this.logGroup = new logs.LogGroup( this, 'ShopifyUnitCountRangeUpdaterLogGroup', {
-      logGroupName: `/expresshop/${ this.stackEnv }/shopify-unit-count-range-updater`,
+      logGroupName: `/expresshop/${ getEnvShortName( this.stackEnv ) }/shopify-unit-count-range-updater`,
       retention: logs.RetentionDays.ONE_WEEK, // Set log retention period
       removalPolicy: this.isProduction ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
     });

@@ -7,7 +7,7 @@ import { loadSettings } from './lib/load-settings';
 import { StackData } from './lib/stack-data';
 
 const rawNodeEnv = process.env.NODE_ENV;
-const nodeEnv = isEnv( rawNodeEnv ) ? rawNodeEnv : 'dev';
+const nodeEnv = isEnv( rawNodeEnv ) ? rawNodeEnv : 'development';
 
 const settings = loadSettings();
 const envSettings = settings[ nodeEnv ];

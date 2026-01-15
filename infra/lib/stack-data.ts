@@ -1,4 +1,6 @@
 import type { Env, SecretConfiguration, LambdaConfiguration } from '@types';
+import { getEnvShortName } from './utils';
+
 
 const POLL_RESULTS_INTERVAL_MINUTES = 5;
 
@@ -15,7 +17,7 @@ export class StackData {
     this.secretConfigurations = [
       {
         id: 'shopify',
-        name: `${stackEnv }/shopify-unit-count-range-updater/shopify`,
+        name: `${ getEnvShortName( stackEnv ) }/shopify-unit-count-range-updater/shopify`,
         envvar: 'SHOPIFY_SECRET_NAME',
       },
     ];
