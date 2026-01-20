@@ -1,9 +1,111 @@
 stages:
   - test
+  - synth
+  - deploy
 
-linting:
+# --------------------------------------------
+# Global defaults
+# --------------------------------------------
+default:
+  image: node:24
+  cache:
+    key: "${CI_PROJECT_PATH_SLUG}"
+    paths:
+      - node_modules/
+  before_script:
+    - node --version
+    - npm --version
+    - npm ci
+
+variables:
+  AWS_DEFAULT_REGION: "us-east-1"
+  CI: "true"
+
+
+# --------------------------------------------
+# Validation jobs
+# --------------------------------------------
+
+lint:
   stage: test
   image: node:24
   script:
     - npm ci
     - npm run lint
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+cdk:synth:
+  stage: synth
+  script:
+    - npx cdk synth
+  artifacts:
+    when: always
+    paths:
+      - cdk.out/
+    expire_in: 7 days
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+
+
+# --------------------------------------------
+# Deploy jobs
+# --------------------------------------------
+
+deploy:dev:
+  stage: deploy
+  when: manual
+
+  environment:
+    name: dev
+
+  resource_group: deploy-dev
+
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: "https://gitlab.com"
+
+  variables:
+    NODE_ENV: "dev"
+    AWS_ROLE_ARN: "${DEV_DEPLOY_ROLE_ARN}"
+
+  script:
+    - echo "$GITLAB_OIDC_TOKEN" > /tmp/gitlab_oidc_token
+    - export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/gitlab_oidc_token
+    - npx cdk deploy --require-approval never
+
+  rules:
+    - if: '$CI_COMMIT_BRANCH'
+      when: manual
+
+
+deploy:prod:
+  stage: deploy
+  when: manual
+
+  environment:
+    name: prod
+
+  resource_group: deploy-prod
+
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: "https://gitlab.com"
+
+  variables:
+    NODE_ENV: "prod"
+    AWS_ROLE_ARN: "${PROD_DEPLOY_ROLE_ARN}"
+
+  script:
+    - echo "$GITLAB_OIDC_TOKEN" > /tmp/gitlab_oidc_token
+    - export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/gitlab_oidc_token
+    - npx cdk deploy --require-approval never
+
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      when: manual
+    - when: never
+
