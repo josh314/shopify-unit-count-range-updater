@@ -69,7 +69,7 @@ deploy:dev:
       aud: "https://gitlab.com"
 
   variables:
-    NODE_ENV: "dev"
+    NODE_ENV: "development"
     AWS_ROLE_ARN: "${DEV_DEPLOY_ROLE_ARN}"
 
   script:
@@ -96,7 +96,7 @@ deploy:prod:
       aud: "https://gitlab.com"
 
   variables:
-    NODE_ENV: "prod"
+    NODE_ENV: "production"
     AWS_ROLE_ARN: "${PROD_DEPLOY_ROLE_ARN}"
 
   script:
