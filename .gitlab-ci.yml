@@ -110,7 +110,7 @@ preflight:dev:
 
   variables:
     NODE_ENV: "development"
-    AWS_ROLE_ARN: "${DEV_DEPLOY_ROLE_ARN}"
+    AWS_ROLE_ARN: "${DEV_PREFLIGHT_ROLE_ARN}"
 
   script:
     - unset AWS_PROFILE
@@ -166,7 +166,7 @@ preflight:prod:
 
   variables:
     NODE_ENV: "production"
-    AWS_ROLE_ARN: "${PROD_DEPLOY_ROLE_ARN}"
+    AWS_ROLE_ARN: "${PROD_PREFLIGHT_ROLE_ARN}"
 
   script:
     - unset AWS_PROFILE
