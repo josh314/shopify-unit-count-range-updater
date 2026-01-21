@@ -14,7 +14,11 @@
   "author": "Joshua \"El\" Davis",
   "main": "index.js",
   "scripts": {
-    "lint": "eslint ."
+    "cdk:synth": "cdk synth",
+    "cdk:deploy": "cdk deploy --require-approval never",
+    "lint": "eslint .",
+    "preflight": "ts-node -r tsconfig-paths/register --prefer-ts-exts infra/scripts/preflight.ts",
+    "deploy": "npm run lint && npm run preflight && npm run cdk:deploy"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

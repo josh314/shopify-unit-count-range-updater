@@ -81,3 +81,20 @@ curl -XPOST "http://localhost:<port>/2015-03-31/functions/function/invocations" 
 ```
 
 Where each lambda is running on a different port between 8888 and 8891 (see the compose file). Each lambda has a corresponding event file in the `events` directory. You'll probably need to modify these to suit your needs. At any rate, use the `driver.ts` script to invoke the lambdas with a more user-friendly interface that keeps track of the correct port and event file for you. Use of `driver.ts` expects event files to be in `data/events/` directory.
+
+## Deployment
+
+Deployment is done as usual with CDK:
+
+```bash
+cdk deploy
+```
+Before deploying, you should run the preflight script to ensure that all necessary AWS resources are in place:
+
+```bash
+npm run preflight
+```
+
+Both the preflight check and the deployment need AWS credentials. For workstation usage, supply these via AWS_PROFILE. 
+
+A `.gitlab-ci.yml` file is included for GitLab CI/CD deployments. The pipeline expects an OICD handshake to provide temporary AWS credentials.
