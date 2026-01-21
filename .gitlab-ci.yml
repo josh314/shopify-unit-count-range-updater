@@ -106,7 +106,7 @@ preflight:dev:
 
   id_tokens:
     GITLAB_OIDC_TOKEN:
-      aud: "https://gitlab.com"
+      aud: sts.amazonaws.com
 
   variables:
     NODE_ENV: "development"
@@ -131,7 +131,7 @@ deploy:dev:
 
   id_tokens:
     GITLAB_OIDC_TOKEN:
-      aud: "https://gitlab.com"
+      aud: sts.amazonaws.com
 
   variables:
     NODE_ENV: "development"
@@ -162,7 +162,7 @@ preflight:prod:
 
   id_tokens:
     GITLAB_OIDC_TOKEN:
-      aud: "https://gitlab.com"
+      aud: sts.amazonaws.com
 
   variables:
     NODE_ENV: "production"
@@ -189,7 +189,7 @@ deploy:prod:
 
   id_tokens:
     GITLAB_OIDC_TOKEN:
-      aud: "https://gitlab.com"
+      aud: sts.amazonaws.com
 
   variables:
     NODE_ENV: "production"
