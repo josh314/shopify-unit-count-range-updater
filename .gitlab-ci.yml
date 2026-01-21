@@ -1,17 +1,33 @@
 stages:
   - test
   - synth
+  - preflight
   - deploy
+
+#--------------------------------------------
+# Anchors and Aliases
+#--------------------------------------------
+
+.oidc_setup: &oidc_setup
+  - umask 077
+  - export AWS_WEB_IDENTITY_TOKEN_FILE="$CI_PROJECT_DIR/.aws_web_identity_token"
+  - echo "$GITLAB_OIDC_TOKEN" > "$AWS_WEB_IDENTITY_TOKEN_FILE"
+  - export AWS_ROLE_SESSION_NAME="gitlab-${CI_PROJECT_PATH_SLUG}-${CI_PIPELINE_ID}-${CI_JOB_ID}"
+
 
 # --------------------------------------------
 # Global defaults
 # --------------------------------------------
 default:
   image: node:24
-  cache:
-    key: "${CI_PROJECT_PATH_SLUG}"
+  cache: &npm_cache
+    key:
+      files:
+        - package-lock.json
     paths:
-      - node_modules/
+      - .npm/
+    policy: pull   # default: everyone pulls, nobody pushes
+
   before_script:
     - node --version
     - npm --version
@@ -20,6 +36,7 @@ default:
 variables:
   AWS_DEFAULT_REGION: "us-east-1"
   CI: "true"
+  NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
 
 
 # --------------------------------------------
@@ -28,16 +45,22 @@ variables:
 
 lint:
   stage: test
-  image: node:24
+  cache:
+    <<: *npm_cache
+    policy: pull-push # warms the .npm cache
   script:
-    - npm ci
     - npm run lint
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH'
+    - if: $CI_COMMIT_BRANCH
 
-cdk:synth:
+synth:dev:
   stage: synth
+  variables:
+    NODE_ENV: "development"
+
+  environment:
+    name: dev
+
   script:
     - npx cdk synth
   artifacts:
@@ -46,18 +69,60 @@ cdk:synth:
       - cdk.out/
     expire_in: 7 days
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_COMMIT_BRANCH != "master"'
+
+
+synth:prod:
+  stage: synth
+  variables:
+    NODE_ENV: "production"
+
+  environment:
+    name: prod
+  script:
+    - npx cdk synth
+  artifacts:
+    when: always
+    paths:
+      - cdk.out/
+    expire_in: 7 days
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+
+
+
+# --------------------------------------------
+# Dev deploy chain
+# --------------------------------------------
+
+# preflight job to validate deployments and check for requisite pre-existing resources
+
+preflight:dev:
+  stage: preflight
+  environment:
+    name: dev
+
+  resource_group: deploy-dev
+
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: "https://gitlab.com"
+
+  variables:
+    NODE_ENV: "development"
+    AWS_ROLE_ARN: "${DEV_DEPLOY_ROLE_ARN}"
+
+  script:
+    - *oidc_setup
+    - aws sts get-caller-identity --output json
+    - npx ts-node -r tsconfig-paths/register --prefer-ts-exts infra/scripts/preflight.ts
+  rules:
     - if: '$CI_COMMIT_BRANCH'
-
-
-
-# --------------------------------------------
-# Deploy jobs
-# --------------------------------------------
+      when: manual
 
 deploy:dev:
   stage: deploy
-  when: manual
+  needs: [ "preflight:dev" ]
 
   environment:
     name: dev
@@ -73,8 +138,7 @@ deploy:dev:
     AWS_ROLE_ARN: "${DEV_DEPLOY_ROLE_ARN}"
 
   script:
-    - echo "$GITLAB_OIDC_TOKEN" > /tmp/gitlab_oidc_token
-    - export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/gitlab_oidc_token
+    - *oidc_setup
     - npx cdk deploy --require-approval never
 
   rules:
@@ -82,9 +146,40 @@ deploy:dev:
       when: manual
 
 
+# --------------------------------------------
+# Prod deploy chain
+# --------------------------------------------
+
+# preflight job to validate deployments and check for requisite pre-existing resources
+
+preflight:prod:
+  stage: preflight
+  environment:
+    name: prod
+
+  resource_group: deploy-prod
+
+  id_tokens:
+    GITLAB_OIDC_TOKEN:
+      aud: "https://gitlab.com"
+
+  variables:
+    NODE_ENV: "production"
+    AWS_ROLE_ARN: "${PROD_DEPLOY_ROLE_ARN}"
+
+  script:
+    - *oidc_setup
+    - aws sts get-caller-identity --output json
+    - npx ts-node -r tsconfig-paths/register --prefer-ts-exts infra/scripts/preflight.ts
+
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      when: manual
+    - when: never
+
 deploy:prod:
   stage: deploy
-  when: manual
+  needs: [ "preflight:prod" ]
 
   environment:
     name: prod
@@ -100,8 +195,7 @@ deploy:prod:
     AWS_ROLE_ARN: "${PROD_DEPLOY_ROLE_ARN}"
 
   script:
-    - echo "$GITLAB_OIDC_TOKEN" > /tmp/gitlab_oidc_token
-    - export AWS_WEB_IDENTITY_TOKEN_FILE=/tmp/gitlab_oidc_token
+    - *oidc_setup
     - npx cdk deploy --require-approval never
 
   rules:
