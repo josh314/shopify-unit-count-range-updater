@@ -113,8 +113,8 @@ preflight:dev:
     AWS_ROLE_ARN: "${DEV_DEPLOY_ROLE_ARN}"
 
   script:
+    - unset AWS_PROFILE
     - *oidc_setup
-    - aws sts get-caller-identity --output json
     - npx ts-node -r tsconfig-paths/register --prefer-ts-exts infra/scripts/preflight.ts
   rules:
     - if: '$CI_COMMIT_BRANCH'
@@ -138,6 +138,7 @@ deploy:dev:
     AWS_ROLE_ARN: "${DEV_DEPLOY_ROLE_ARN}"
 
   script:
+    - unset AWS_PROFILE
     - *oidc_setup
     - npx cdk deploy --require-approval never
 
@@ -168,8 +169,8 @@ preflight:prod:
     AWS_ROLE_ARN: "${PROD_DEPLOY_ROLE_ARN}"
 
   script:
+    - unset AWS_PROFILE
     - *oidc_setup
-    - aws sts get-caller-identity --output json
     - npx ts-node -r tsconfig-paths/register --prefer-ts-exts infra/scripts/preflight.ts
 
   rules:
@@ -195,6 +196,7 @@ deploy:prod:
     AWS_ROLE_ARN: "${PROD_DEPLOY_ROLE_ARN}"
 
   script:
+    - unset AWS_PROFILE
     - *oidc_setup
     - npx cdk deploy --require-approval never
 
